@@ -16,12 +16,12 @@ const LobbyScreen = () => {
     socket.emit("room:join", { email, room });
     console.log(email,room);
     },
-    [email, room]
+    [email, room,socket]
   );
 
 const handleJoinRoom = useCallback(
     (data) => {
-      const { email, room } = data;
+      const { room } = data;
       navigate(`/room/${room}`);
     },
     [navigate]

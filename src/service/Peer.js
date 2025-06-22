@@ -11,7 +11,7 @@ class PeerService {
           },
         ],
       });
-      this._tracksAdded = false; // ✅ Custom flag to avoid multiple addTracks
+      this._tracksAdded = false;
     }
   }
 
@@ -20,7 +20,7 @@ class PeerService {
       stream.getTracks().forEach((track) => {
         this.peer.addTrack(track, stream);
       });
-      this._tracksAdded = true; // ✅ Mark as done
+      this._tracksAdded = true;
     }
   }
 
@@ -65,4 +65,6 @@ class PeerService {
   }
 }
 
-export default new PeerService();
+const peer = new PeerService();
+
+export default peer;
