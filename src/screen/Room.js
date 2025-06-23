@@ -1,7 +1,7 @@
 
 import React, { useEffect, useCallback,useState} from "react";
 import { useSocket } from "../context/SocketProvider";
-//import ReactPlayer from "react-player";
+import ReactPlayer from "react-player";
 import peer from "../service/Peer"
 
 
@@ -123,45 +123,30 @@ const Room = () => {
       <h4>{remoteSocketId ? "Connected" : "No one in room"}</h4>
       {myStream && <button onClick={sendStreams}>Send Stream</button>}
       {remoteSocketId && <button onClick={handleCallUser}>CALL</button>}
-      
       {myStream && (
-  <>
-    <h1>My Stream</h1>
-    <video
-      ref={(video) => {
-        if (video) {
-          video.srcObject = myStream;  // ✅ Correct way to attach MediaStream
-        }
-      }}
-      autoPlay
-      playsInline
-      muted   // ✅ mute to avoid audio feedback (mic → speaker loop)
-      controls
-      height="100"
-      width="200"
-    />
-  </>
-)}
-
+        <>
+          <h1>My Stream</h1>
+          <ReactPlayer
+            playing
+            muted
+            height="100px"
+            width="200px"
+            url={myStream}
+          />
+        </>
+      )}
       {remoteStream && (
-  <>
-    <h1>Remote Stream</h1>
-    <video
-      ref={(video) => {
-        if (video) {
-          video.srcObject = remoteStream;  // ✅ Correct way to attach WebRTC stream
-        }
-      }}
-      autoPlay
-      playsInline
-      muted={false}      // ✅ Enables sound
-      controls           // ✅ Helps with autoplay restrictions
-      height="100"
-      width="200"
-    />
-  </>
-)}
-
+        <>
+          <h1>Remote Stream</h1>
+          <ReactPlayer
+            playing
+            muted
+            height="100px"
+            width="200px"
+            url={remoteStream}
+          />
+        </>
+      )}
     </div>
   );
 };
