@@ -1,15 +1,15 @@
-
-import React, { useEffect, useCallback,useState} from "react";
+import React, { useEffect, useCallback, useState, useRef } from "react";
 import { useSocket } from "../context/SocketProvider";
-import ReactPlayer from "react-player";
-import peer from "../service/Peer"
-
+import peer from "../service/Peer";
 
 const Room = () => {
   const socket = useSocket();
   const [remoteSocketId, setRemoteSocketId] = useState(null);
   const [myStream, setMyStream] = useState();
   const [remoteStream, setRemoteStream] = useState();
+
+  const myVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
 
   const handleUserJoined = useCallback(({ email, id }) => {
     console.log(`Email ${email} joined room`);
@@ -21,12 +21,11 @@ const Room = () => {
       audio: true,
       video: true,
     });
-    
+    setMyStream(stream);
+    if (myVideoRef.current) myVideoRef.current.srcObject = stream;
 
     const offer = await peer.getOffer();
     socket.emit("user:call", { to: remoteSocketId, offer });
-    setMyStream(stream);
-    
   }, [remoteSocketId, socket]);
 
   const handleIncommingCall = useCallback(
@@ -37,6 +36,8 @@ const Room = () => {
         video: true,
       });
       setMyStream(stream);
+      if (myVideoRef.current) myVideoRef.current.srcObject = stream;
+
       console.log(`Incoming Call`, from, offer);
       const ans = await peer.getAnswer(offer);
       socket.emit("call:accepted", { to: from, ans });
@@ -44,14 +45,14 @@ const Room = () => {
     [socket]
   );
 
- const sendStreams = useCallback(() => {
-  if (!peer._tracksAdded) {
-    for (const track of myStream.getTracks()) {
-      peer.peer.addTrack(track, myStream);
+  const sendStreams = useCallback(() => {
+    if (!peer._tracksAdded) {
+      for (const track of myStream.getTracks()) {
+        peer.peer.addTrack(track, myStream);
+      }
+      peer._tracksAdded = true;
     }
-    peer._tracksAdded = true; // ✅ Custom property to prevent duplicates
-  }
-}, [myStream]);
+  }, [myStream]);
 
   const handleCallAccepted = useCallback(
     ({ from, ans }) => {
@@ -88,9 +89,10 @@ const Room = () => {
 
   useEffect(() => {
     peer.peer.addEventListener("track", async (ev) => {
-      const remoteStream = ev.streams;
+      const remoteStream = ev.streams[0];
+      setRemoteStream(remoteStream);
+      if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream;
       console.log("GOT TRACKS!!");
-      setRemoteStream(remoteStream[0]);
     });
   }, []);
 
@@ -121,29 +123,38 @@ const Room = () => {
     <div>
       <h1>Room Page</h1>
       <h4>{remoteSocketId ? "Connected" : "No one in room"}</h4>
+
       {myStream && <button onClick={sendStreams}>Send Stream</button>}
       {remoteSocketId && <button onClick={handleCallUser}>CALL</button>}
+
       {myStream && (
         <>
           <h1>My Stream</h1>
-          <ReactPlayer
-            playing
-            muted
-            height="100px"
-            width="200px"
-            url={myStream}
+          <video
+            ref={myVideoRef}
+            autoPlay
+            playsInline
+            muted // ✅ muted for your own stream to prevent echo
+            controls
+            width="300"
+            height="200"
+            style={{ backgroundColor: "black" }}
           />
         </>
       )}
+
       {remoteStream && (
         <>
           <h1>Remote Stream</h1>
-          <ReactPlayer
-            playing
-            muted
-            height="100px"
-            width="200px"
-            url={remoteStream}
+          <video
+            ref={remoteVideoRef}
+            autoPlay
+            playsInline
+            muted={false} // ✅ to hear audio from remote peer
+            controls
+            width="300"
+            height="200"
+            style={{ backgroundColor: "black" }}
           />
         </>
       )}
