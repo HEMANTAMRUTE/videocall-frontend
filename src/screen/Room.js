@@ -22,7 +22,6 @@ const Room = () => {
       video: true,
     });
     setMyStream(stream);
-    if (myVideoRef.current) myVideoRef.current.srcObject = stream;
 
     const offer = await peer.getOffer();
     socket.emit("user:call", { to: remoteSocketId, offer });
@@ -36,7 +35,6 @@ const Room = () => {
         video: true,
       });
       setMyStream(stream);
-      if (myVideoRef.current) myVideoRef.current.srcObject = stream;
 
       console.log(`Incoming Call`, from, offer);
       const ans = await peer.getAnswer(offer);
@@ -87,7 +85,6 @@ const Room = () => {
     await peer.setLocalDescription(ans);
   }, []);
 
-  // ✅ Only set remoteStream here → DO NOT set remoteVideoRef.srcObject here
   useEffect(() => {
     peer.peer.addEventListener("track", (ev) => {
       const remoteStream = ev.streams[0];
@@ -96,13 +93,20 @@ const Room = () => {
     });
   }, []);
 
-  // ✅ AFTER remoteStream and <video> exist → attach it
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
       remoteVideoRef.current.srcObject = remoteStream;
       console.log("✅ remoteVideoRef attached stream:", remoteVideoRef.current.srcObject);
     }
   }, [remoteStream]);
+
+  // ✅ UseEffect for My Stream → same as for Remote Stream
+  useEffect(() => {
+    if (myVideoRef.current && myStream) {
+      myVideoRef.current.srcObject = myStream;
+      console.log("✅ myVideoRef attached stream:", myVideoRef.current.srcObject);
+    }
+  }, [myStream]);
 
   useEffect(() => {
     socket.on("user:joined", handleUserJoined);
@@ -135,35 +139,34 @@ const Room = () => {
       {myStream && <button onClick={sendStreams}>Send Stream</button>}
       {remoteSocketId && <button onClick={handleCallUser}>CALL</button>}
 
-     {myStream && (
-  <>
-    <h1>My Stream</h1>
-    <video
-      ref={myVideoRef}
-      autoPlay
-      playsInline
-      muted
-      controls
-      width="300"
-      height="200"
-      style={{ backgroundColor: "black" }}
-    />
-  </>
-)}
+      {myStream && (
+        <>
+          <h1>My Stream</h1>
+          <video
+            ref={myVideoRef}
+            autoPlay
+            playsInline
+            muted
+            controls
+            width="300"
+            height="200"
+            style={{ backgroundColor: "black" }}
+          />
+        </>
+      )}
 
-{/* ✅ Always render remote video */}
-<h1>Remote Stream</h1>
-<video
-  ref={remoteVideoRef}
-  autoPlay
-  playsInline
-  muted={false}
-  controls
-  width="300"
-  height="200"
-  style={{ backgroundColor: "black" }}
-/>
-
+      {/* ✅ Always render remote video */}
+      <h1>Remote Stream</h1>
+      <video
+        ref={remoteVideoRef}
+        autoPlay
+        playsInline
+        muted={false}
+        controls
+        width="300"
+        height="200"
+        style={{ backgroundColor: "black" }}
+      />
     </div>
   );
 };
