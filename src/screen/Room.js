@@ -135,37 +135,35 @@ const Room = () => {
       {myStream && <button onClick={sendStreams}>Send Stream</button>}
       {remoteSocketId && <button onClick={handleCallUser}>CALL</button>}
 
-      {myStream && (
-        <>
-          <h1>My Stream</h1>
-          <video
-            ref={myVideoRef}
-            autoPlay
-            playsInline
-            muted // ✅ muted for your own stream to prevent echo
-            controls
-            width="300"
-            height="200"
-            style={{ backgroundColor: "black" }}
-          />
-        </>
-      )}
+     {myStream && (
+  <>
+    <h1>My Stream</h1>
+    <video
+      ref={myVideoRef}
+      autoPlay
+      playsInline
+      muted
+      controls
+      width="300"
+      height="200"
+      style={{ backgroundColor: "black" }}
+    />
+  </>
+)}
 
-      {remoteStream && (
-        <>
-          <h1>Remote Stream</h1>
-          <video
-            ref={remoteVideoRef}
-            autoPlay
-            playsInline
-            muted={false} // ✅ to hear audio from remote peer
-            controls
-            width="300"
-            height="200"
-            style={{ backgroundColor: "black" }}
-          />
-        </>
-      )}
+{/* ✅ Always render remote video */}
+<h1>Remote Stream</h1>
+<video
+  ref={remoteVideoRef}
+  autoPlay
+  playsInline
+  muted={false}
+  controls
+  width="300"
+  height="200"
+  style={{ backgroundColor: "black" }}
+/>
+
     </div>
   );
 };
