@@ -28,20 +28,25 @@ const Room = () => {
   }, [remoteSocketId, socket]);
 
   const handleIncommingCall = useCallback(
-    async ({ from, offer }) => {
-      setRemoteSocketId(from);
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: true,
-      });
-      setMyStream(stream);
+  async ({ from, offer }) => {
+    setRemoteSocketId(from);
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: true,
+    });
+    setMyStream(stream);
 
-      console.log(`Incoming Call`, from, offer);
-      const ans = await peer.getAnswer(offer);
-      socket.emit("call:accepted", { to: from, ans });
-    },
-    [socket]
-  );
+    console.log(`Incoming Call`, from, offer);
+    const ans = await peer.getAnswer(offer);
+    socket.emit("call:accepted", { to: from, ans });
+
+    // ✅ Call sendStreams after setting up myStream and emitting accepted
+    setTimeout(() => {
+      sendStreams(); // <-- This is what was missing!
+    }, 0);
+  },
+  [socket, sendStreams]
+);
 
   const sendStreams = useCallback(() => {
     if (!peer._tracksAdded) {
