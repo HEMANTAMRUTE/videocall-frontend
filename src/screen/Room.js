@@ -134,6 +134,52 @@ const Room = () => {
     handleNegoNeedIncomming,
     handleNegoNeedFinal,
   ]);
+  //
+  const [combinedRecorder, setCombinedRecorder] = useState(null);
+const [combinedChunks, setCombinedChunks] = useState([]);
+
+const startFullRecording = () => {
+  if (myStream && remoteStream) {
+    const combinedStream = new MediaStream([
+      ...myStream.getAudioTracks(),
+      ...remoteStream.getAudioTracks(),
+    ]);
+
+    const recorder = new MediaRecorder(combinedStream, { mimeType: "audio/webm" });
+
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) {
+        setCombinedChunks((prev) => [...prev, e.data]);
+      }
+    };
+
+    recorder.onstop = () => {
+      const audioBlob = new Blob(combinedChunks, { type: "audio/webm" });
+      const url = URL.createObjectURL(audioBlob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "full_session_audio.webm";
+      a.click();
+
+      setCombinedChunks([]);
+    };
+
+    recorder.start();
+    setCombinedRecorder(recorder);
+    console.log("🎙 FULL SESSION RECORDING STARTED!");
+  } else {
+    console.warn("Streams not ready for recording yet.");
+  }
+};
+
+const stopFullRecording = () => {
+  if (combinedRecorder) {
+    combinedRecorder.stop();
+    console.log("💾 FULL SESSION RECORDING STOPPED!");
+  }
+};
+//
 
   return (
     <div>
@@ -142,6 +188,12 @@ const Room = () => {
 
       {myStream && <button onClick={sendStreams}>Send Stream</button>}
       {remoteSocketId && <button onClick={handleCallUser}>CALL</button>}
+       {myStream && remoteStream && (
+  <>
+    <button onClick={startFullRecording}>🎙 Start Full Session Recording</button>
+    <button onClick={stopFullRecording}>💾 Stop & Download Full Audio</button>
+  </>
+)}
 
       {myStream && (
         <>
