@@ -88,13 +88,19 @@ const Room = () => {
   }, []);
 
   useEffect(() => {
-    peer.peer.addEventListener("track", async (ev) => {
-      const remoteStream = ev.streams[0];
-      setRemoteStream(remoteStream);
-      if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream;
-      console.log("GOT TRACKS!!");
-    });
-  }, []);
+  peer.peer.addEventListener("track", (ev) => {
+    const remoteStream = ev.streams[0];
+    console.log("GOT TRACKS!!", remoteStream);
+    setRemoteStream(remoteStream);
+
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = remoteStream;
+      console.log("✅ remoteVideoRef attached stream:", remoteVideoRef.current.srcObject);
+    } else {
+      console.log("❗ remoteVideoRef.current is null");
+    }
+  });
+}, []);
 
   useEffect(() => {
     socket.on("user:joined", handleUserJoined);
