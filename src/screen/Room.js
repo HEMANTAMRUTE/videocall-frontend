@@ -16,6 +16,16 @@ const Room = () => {
     setRemoteSocketId(id);
   }, []);
 
+  const sendStreams = useCallback(() => {
+    if (!peer._tracksAdded && myStream) {
+      for (const track of myStream.getTracks()) {
+        peer.peer.addTrack(track, myStream);
+      }
+      peer._tracksAdded = true;
+      console.log("✅ Sent tracks to peer");
+    }
+  }, [myStream]);
+
   const handleCallUser = useCallback(async () => {
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: true,
@@ -28,34 +38,24 @@ const Room = () => {
   }, [remoteSocketId, socket]);
 
   const handleIncommingCall = useCallback(
-  async ({ from, offer }) => {
-    setRemoteSocketId(from);
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: true,
-    });
-    setMyStream(stream);
+    async ({ from, offer }) => {
+      setRemoteSocketId(from);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: true,
+      });
+      setMyStream(stream);
 
-    console.log(`Incoming Call`, from, offer);
-    const ans = await peer.getAnswer(offer);
-    socket.emit("call:accepted", { to: from, ans });
+      console.log(`Incoming Call`, from, offer);
+      const ans = await peer.getAnswer(offer);
+      socket.emit("call:accepted", { to: from, ans });
 
-    // ✅ Call sendStreams after setting up myStream and emitting accepted
-    setTimeout(() => {
-      sendStreams(); // <-- This is what was missing!
-    }, 0);
-  },
-  [socket, sendStreams]
-);
-
-  const sendStreams = useCallback(() => {
-    if (!peer._tracksAdded) {
-      for (const track of myStream.getTracks()) {
-        peer.peer.addTrack(track, myStream);
-      }
-      peer._tracksAdded = true;
-    }
-  }, [myStream]);
+      setTimeout(() => {
+        sendStreams(); // ✅ Ensure myStream is ready before sending
+      }, 0);
+    },
+    [socket, sendStreams]
+  );
 
   const handleCallAccepted = useCallback(
     ({ from, ans }) => {
@@ -105,7 +105,6 @@ const Room = () => {
     }
   }, [remoteStream]);
 
-  // ✅ UseEffect for My Stream → same as for Remote Stream
   useEffect(() => {
     if (myVideoRef.current && myStream) {
       myVideoRef.current.srcObject = myStream;
@@ -146,7 +145,7 @@ const Room = () => {
 
       {myStream && (
         <>
-          <h1>My Stream</h1>
+          <h2>My Stream</h2>
           <video
             ref={myVideoRef}
             autoPlay
@@ -160,8 +159,7 @@ const Room = () => {
         </>
       )}
 
-      {/* ✅ Always render remote video */}
-      <h1>Remote Stream</h1>
+      <h2>Remote Stream</h2>
       <video
         ref={remoteVideoRef}
         autoPlay
