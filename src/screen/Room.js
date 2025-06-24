@@ -87,20 +87,22 @@ const Room = () => {
     await peer.setLocalDescription(ans);
   }, []);
 
+  // ✅ Only set remoteStream here → DO NOT set remoteVideoRef.srcObject here
   useEffect(() => {
-  peer.peer.addEventListener("track", (ev) => {
-    const remoteStream = ev.streams[0];
-    console.log("GOT TRACKS!!", remoteStream);
-    setRemoteStream(remoteStream);
+    peer.peer.addEventListener("track", (ev) => {
+      const remoteStream = ev.streams[0];
+      console.log("GOT TRACKS!!", remoteStream);
+      setRemoteStream(remoteStream);
+    });
+  }, []);
 
-    if (remoteVideoRef.current) {
+  // ✅ AFTER remoteStream and <video> exist → attach it
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStream) {
       remoteVideoRef.current.srcObject = remoteStream;
       console.log("✅ remoteVideoRef attached stream:", remoteVideoRef.current.srcObject);
-    } else {
-      console.log("❗ remoteVideoRef.current is null");
     }
-  });
-}, []);
+  }, [remoteStream]);
 
   useEffect(() => {
     socket.on("user:joined", handleUserJoined);
