@@ -1,6 +1,9 @@
+// Room.js (with AssemblyAI integration)
 import React, { useEffect, useCallback, useState, useRef } from "react";
 import { useSocket } from "../context/SocketProvider";
 import peer from "../service/Peer";
+
+const ASSEMBLY_API_KEY = "YOUR_ASSEMBLYAI_API_KEY"; // replace this with your actual key
 
 const Room = () => {
   const socket = useSocket();
@@ -18,7 +21,6 @@ const Room = () => {
     setRemoteSocketId(id);
   }, []);
 
-  // ✅ Updated sendStreams: remove conditional blocking track sending
   const sendStreams = useCallback(() => {
     if (myStream) {
       myStream.getTracks().forEach((track) => {
@@ -31,7 +33,6 @@ const Room = () => {
   const handleCallUser = useCallback(async () => {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
     setMyStream(stream);
-
     const offer = await peer.getOffer();
     socket.emit("user:call", { to: remoteSocketId, offer });
   }, [remoteSocketId, socket]);
@@ -40,11 +41,9 @@ const Room = () => {
     setRemoteSocketId(from);
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
     setMyStream(stream);
-
     await peer.setRemoteDescription(offer);
     const ans = await peer.getAnswer();
     socket.emit("call:accepted", { to: from, ans });
-
     sendStreams();
   }, [socket, sendStreams]);
 
@@ -103,7 +102,6 @@ const Room = () => {
     socket.on("call:accepted", handleCallAccepted);
     socket.on("peer:nego:needed", handleNegoNeedIncomming);
     socket.on("peer:nego:final", handleNegoNeedFinal);
-
     return () => {
       socket.off("user:joined", handleUserJoined);
       socket.off("incomming:call", handleIncommingCall);
@@ -111,35 +109,71 @@ const Room = () => {
       socket.off("peer:nego:needed", handleNegoNeedIncomming);
       socket.off("peer:nego:final", handleNegoNeedFinal);
     };
-  }, [
-    socket,
-    handleUserJoined,
-    handleIncommingCall,
-    handleCallAccepted,
-    handleNegoNeedIncomming,
-    handleNegoNeedFinal,
-  ]);
+  }, [socket, handleUserJoined, handleIncommingCall, handleCallAccepted, handleNegoNeedIncomming, handleNegoNeedFinal]);
 
-  // ✅ Utility to debug audio track status
   const logAudioTracks = () => {
     const localTracks = myStream?.getAudioTracks() || [];
     const remoteTracks = remoteStream?.getAudioTracks() || [];
-
     console.log("🎧 Local Audio Tracks:", localTracks);
     console.log("🎧 Remote Audio Tracks:", remoteTracks);
+    localTracks.forEach((track) => console.log("📌 Local track - enabled:", track.enabled, "| readyState:", track.readyState));
+    remoteTracks.forEach((track) => console.log("📌 Remote track - enabled:", track.enabled, "| readyState:", track.readyState));
+  };
 
-    localTracks.forEach((track) => {
-      console.log("📌 Local track - enabled:", track.enabled, "| readyState:", track.readyState);
+  const uploadToAssemblyAI = async (blob) => {
+    const response = await fetch("https://api.assemblyai.com/v2/upload", {
+      method: "POST",
+      headers: { authorization: ASSEMBLY_API_KEY },
+      body: blob,
     });
-    remoteTracks.forEach((track) => {
-      console.log("📌 Remote track - enabled:", track.enabled, "| readyState:", track.readyState);
+    const data = await response.json();
+    return data.upload_url;
+  };
+
+  const startTranscription = async (uploadUrl) => {
+    const response = await fetch("https://api.assemblyai.com/v2/transcript", {
+      method: "POST",
+      headers: {
+        authorization: ASSEMBLY_API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ audio_url: uploadUrl }),
     });
+    const data = await response.json();
+    return data.id;
+  };
+
+  const pollTranscription = async (transcriptId) => {
+    const pollingEndpoint = `https://api.assemblyai.com/v2/transcript/${transcriptId}`;
+    while (true) {
+      const res = await fetch(pollingEndpoint, {
+        headers: { authorization: ASSEMBLY_API_KEY },
+      });
+      const data = await res.json();
+      if (data.status === "completed") {
+        alert("📝 Transcription:\n" + data.text);
+        console.log("Transcription:", data.text);
+        return data.text;
+      } else if (data.status === "error") {
+        throw new Error(data.error);
+      }
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+  };
+
+  const transcribeAudio = async (blob) => {
+    try {
+      const uploadUrl = await uploadToAssemblyAI(blob);
+      const transcriptId = await startTranscription(uploadUrl);
+      await pollTranscription(transcriptId);
+    } catch (err) {
+      console.error("Transcription failed:", err);
+    }
   };
 
   const startFullRecording = () => {
     if (myStream && remoteStream) {
-      logAudioTracks(); // Debugging before recording
-
+      logAudioTracks();
       const combinedStream = new MediaStream([
         ...myStream.getAudioTracks(),
         ...remoteStream.getAudioTracks(),
@@ -152,33 +186,25 @@ const Room = () => {
       });
 
       recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          setCombinedChunks((prev) => [...prev, e.data]);
-        }
+        if (e.data.size > 0) setCombinedChunks((prev) => [...prev, e.data]);
       };
 
-      recorder.onstop = () => {
-        if (combinedChunks.length === 0) {
-          console.warn("❗ No audio recorded. Microphones may be muted or disconnected.");
-          return;
-        }
-
+      recorder.onstop = async () => {
+        if (combinedChunks.length === 0) return console.warn("❗ No audio recorded.");
         const audioBlob = new Blob(combinedChunks, { type: "audio/webm" });
         const url = URL.createObjectURL(audioBlob);
         const a = document.createElement("a");
         a.href = url;
         a.download = "full_session_audio.webm";
         a.click();
-
         setCombinedChunks([]);
         console.log("💾 Download complete.");
+        await transcribeAudio(audioBlob);
       };
 
       recorder.start();
       setCombinedRecorder(recorder);
       console.log("🎙 FULL SESSION RECORDING STARTED!");
-    } else {
-      console.warn("❗ Streams not ready for recording.");
     }
   };
 
@@ -193,7 +219,6 @@ const Room = () => {
     <div>
       <h1>Room Page</h1>
       <h4>{remoteSocketId ? "Connected" : "No one in room"}</h4>
-
       {myStream && <button onClick={sendStreams}>Send Stream</button>}
       {remoteSocketId && <button onClick={handleCallUser}>CALL</button>}
       {myStream && remoteStream && (
@@ -202,34 +227,14 @@ const Room = () => {
           <button onClick={stopFullRecording}>💾 Stop & Download Full Audio</button>
         </>
       )}
-
       {myStream && (
         <>
           <h2>My Stream</h2>
-          <video
-            ref={myVideoRef}
-            autoPlay
-            playsInline
-            muted
-            controls
-            width="300"
-            height="200"
-            style={{ backgroundColor: "black" }}
-          />
+          <video ref={myVideoRef} autoPlay playsInline muted controls width="300" height="200" style={{ backgroundColor: "black" }} />
         </>
       )}
-
       <h2>Remote Stream</h2>
-      <video
-        ref={remoteVideoRef}
-        autoPlay
-        playsInline
-        muted={false}
-        controls
-        width="300"
-        height="200"
-        style={{ backgroundColor: "black" }}
-      />
+      <video ref={remoteVideoRef} autoPlay playsInline muted={false} controls width="300" height="200" style={{ backgroundColor: "black" }} />
     </div>
   );
 };
