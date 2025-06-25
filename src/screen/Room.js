@@ -3,7 +3,7 @@ import React, { useEffect, useCallback, useState, useRef } from "react";
 import { useSocket } from "../context/SocketProvider";
 import peer from "../service/Peer";
 
-const ASSEMBLY_API_KEY = "YOUR_ASSEMBLYAI_API_KEY"; // replace this with your actual key
+const ASSEMBLY_API_KEY = "0ff558c76ad14ab087192c8d37f13fa5"; // replace this with your actual key
 
 const Room = () => {
   const socket = useSocket();
