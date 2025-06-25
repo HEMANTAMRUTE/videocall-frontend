@@ -136,50 +136,70 @@ const Room = () => {
     handleNegoNeedFinal,
   ]);
   //
-  const [combinedRecorder, setCombinedRecorder] = useState(null);
-const [combinedChunks, setCombinedChunks] = useState([]);
+   const [combinedRecorder, setCombinedRecorder] = useState(null);
+  const [combinedChunks, setCombinedChunks] = useState([]);
 
-const startFullRecording = () => {
-  if (myStream && remoteStream) {
-    const combinedStream = new MediaStream([
-      ...myStream.getAudioTracks(),
-      ...remoteStream.getAudioTracks(),
-    ]);
+  const logAudioTracks = () => {
+    const localTracks = myStream?.getAudioTracks() || [];
+    const remoteTracks = remoteStream?.getAudioTracks() || [];
 
-    const recorder = new MediaRecorder(combinedStream, { mimeType: "audio/webm" });
+    console.log("🎧 Local Audio Tracks:", localTracks);
+    console.log("🎧 Remote Audio Tracks:", remoteTracks);
 
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) {
-        setCombinedChunks((prev) => [...prev, e.data]);
-      }
-    };
+    localTracks.forEach((track) => {
+      console.log("📌 Local track - enabled:", track.enabled, "| readyState:", track.readyState);
+    });
+    remoteTracks.forEach((track) => {
+      console.log("📌 Remote track - enabled:", track.enabled, "| readyState:", track.readyState);
+    });
+  };
 
-    recorder.onstop = () => {
-      const audioBlob = new Blob(combinedChunks, { type: "audio/webm" });
-      const url = URL.createObjectURL(audioBlob);
+  const startFullRecording = () => {
+    if (myStream && remoteStream) {
+      logAudioTracks(); // ✅ Call before starting
 
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "full_session_audio.webm";
-      a.click();
+      const combinedStream = new MediaStream([
+        ...myStream.getAudioTracks(),
+        ...remoteStream.getAudioTracks(),
+      ]);
 
-      setCombinedChunks([]);
-    };
+      const recorder = new MediaRecorder(combinedStream, {
+        mimeType: MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+          ? "audio/webm;codecs=opus"
+          : "audio/webm",
+      });
 
-    recorder.start();
-    setCombinedRecorder(recorder);
-    console.log("🎙 FULL SESSION RECORDING STARTED!");
-  } else {
-    console.warn("Streams not ready for recording yet.");
-  }
-};
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          setCombinedChunks((prev) => [...prev, e.data]);
+        }
+      };
 
-const stopFullRecording = () => {
-  if (combinedRecorder) {
-    combinedRecorder.stop();
-    console.log("💾 FULL SESSION RECORDING STOPPED!");
-  }
-};
+      recorder.onstop = () => {
+        if (combinedChunks.length === 0) {
+          console.warn("❗ No audio recorded. Microphones may be muted or disconnected.");
+          return;
+        }
+
+        const audioBlob = new Blob(combinedChunks, { type: "audio/webm" });
+        const url = URL.createObjectURL(audioBlob);
+
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "full_session_audio.webm";
+        a.click();
+
+        setCombinedChunks([]);
+        console.log("💾 Download complete.");
+      };
+
+      recorder.start();
+      setCombinedRecorder(recorder);
+      console.log("🎙 FULL SESSION RECORDING STARTED!");
+    } else {
+      console.warn("❗ Streams not ready for recording.");
+    }
+  };
 //
 
 
