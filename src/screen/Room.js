@@ -38,24 +38,25 @@ const Room = () => {
   }, [remoteSocketId, socket]);
 
   const handleIncommingCall = useCallback(
-    async ({ from, offer }) => {
-      setRemoteSocketId(from);
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: true,
-      });
-      setMyStream(stream);
+  async ({ from, offer }) => {
+    setRemoteSocketId(from);
 
-      console.log(`Incoming Call`, from, offer);
-      const ans = await peer.getAnswer(offer);
-      socket.emit("call:accepted", { to: from, ans });
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: true,
+    });
+    setMyStream(stream);
 
-      setTimeout(() => {
-        sendStreams(); // ✅ Ensure myStream is ready before sending
-      }, 0);
-    },
-    [socket, sendStreams]
-  );
+    // ✅ Set remote description BEFORE answering
+    await peer.setRemoteDescription(offer);
+
+    const ans = await peer.getAnswer();
+    socket.emit("call:accepted", { to: from, ans });
+
+    sendStreams();
+  },
+  [socket, sendStreams]
+);
 
   const handleCallAccepted = useCallback(
     ({ from, ans }) => {
