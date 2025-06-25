@@ -38,6 +38,9 @@ class PeerService {
       await this.peer.setRemoteDescription(ans);
     }
   }
+   async setRemoteDescription(offer) {
+      await peer.setRemoteDescription(new RTCSessionDescription(offer));
+    }
 
   async getOffer() {
     if (this.peer) {
