@@ -7,6 +7,8 @@ const Room = () => {
   const [remoteSocketId, setRemoteSocketId] = useState(null);
   const [myStream, setMyStream] = useState();
   const [remoteStream, setRemoteStream] = useState();
+  const [combinedRecorder, setCombinedRecorder] = useState(null);
+  const [combinedChunks, setCombinedChunks] = useState([]);
 
   const myVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -16,61 +18,55 @@ const Room = () => {
     setRemoteSocketId(id);
   }, []);
 
+  // ✅ Updated sendStreams: remove conditional blocking track sending
   const sendStreams = useCallback(() => {
-    if (!peer._tracksAdded && myStream) {
-      for (const track of myStream.getTracks()) {
+    if (myStream) {
+      myStream.getTracks().forEach((track) => {
         peer.peer.addTrack(track, myStream);
-      }
-      peer._tracksAdded = true;
+      });
       console.log("✅ Sent tracks to peer");
     }
   }, [myStream]);
 
   const handleCallUser = useCallback(async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: true,
-    });
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
     setMyStream(stream);
 
     const offer = await peer.getOffer();
     socket.emit("user:call", { to: remoteSocketId, offer });
   }, [remoteSocketId, socket]);
 
-  const handleIncommingCall = useCallback(
-  async ({ from, offer }) => {
+  const handleIncommingCall = useCallback(async ({ from, offer }) => {
     setRemoteSocketId(from);
-
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: true,
-    });
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
     setMyStream(stream);
 
-    // ✅ Set remote description BEFORE answering
     await peer.setRemoteDescription(offer);
-
     const ans = await peer.getAnswer();
     socket.emit("call:accepted", { to: from, ans });
 
     sendStreams();
-  },
-  [socket, sendStreams]
-);
+  }, [socket, sendStreams]);
 
-  const handleCallAccepted = useCallback(
-    ({ from, ans }) => {
-      peer.setLocalDescription(ans);
-      console.log("Call Accepted!");
-      sendStreams();
-    },
-    [sendStreams]
-  );
+  const handleCallAccepted = useCallback(({ from, ans }) => {
+    peer.setLocalDescription(ans);
+    console.log("Call Accepted!");
+    sendStreams();
+  }, [sendStreams]);
 
   const handleNegoNeeded = useCallback(async () => {
     const offer = await peer.getOffer();
     socket.emit("peer:nego:needed", { offer, to: remoteSocketId });
   }, [remoteSocketId, socket]);
+
+  const handleNegoNeedIncomming = useCallback(async ({ from, offer }) => {
+    const ans = await peer.getAnswer(offer);
+    socket.emit("peer:nego:done", { to: from, ans });
+  }, [socket]);
+
+  const handleNegoNeedFinal = useCallback(async ({ ans }) => {
+    await peer.setLocalDescription(ans);
+  }, []);
 
   useEffect(() => {
     peer.peer.addEventListener("negotiationneeded", handleNegoNeeded);
@@ -79,22 +75,10 @@ const Room = () => {
     };
   }, [handleNegoNeeded]);
 
-  const handleNegoNeedIncomming = useCallback(
-    async ({ from, offer }) => {
-      const ans = await peer.getAnswer(offer);
-      socket.emit("peer:nego:done", { to: from, ans });
-    },
-    [socket]
-  );
-
-  const handleNegoNeedFinal = useCallback(async ({ ans }) => {
-    await peer.setLocalDescription(ans);
-  }, []);
-
   useEffect(() => {
     peer.peer.addEventListener("track", (ev) => {
       const remoteStream = ev.streams[0];
-      console.log("GOT TRACKS!!", remoteStream);
+      console.log("🎧 GOT TRACKS!!", remoteStream);
       setRemoteStream(remoteStream);
     });
   }, []);
@@ -135,10 +119,8 @@ const Room = () => {
     handleNegoNeedIncomming,
     handleNegoNeedFinal,
   ]);
-  //
-   const [combinedRecorder, setCombinedRecorder] = useState(null);
-  const [combinedChunks, setCombinedChunks] = useState([]);
 
+  // ✅ Utility to debug audio track status
   const logAudioTracks = () => {
     const localTracks = myStream?.getAudioTracks() || [];
     const remoteTracks = remoteStream?.getAudioTracks() || [];
@@ -156,7 +138,7 @@ const Room = () => {
 
   const startFullRecording = () => {
     if (myStream && remoteStream) {
-      logAudioTracks(); // ✅ Call before starting
+      logAudioTracks(); // Debugging before recording
 
       const combinedStream = new MediaStream([
         ...myStream.getAudioTracks(),
@@ -183,7 +165,6 @@ const Room = () => {
 
         const audioBlob = new Blob(combinedChunks, { type: "audio/webm" });
         const url = URL.createObjectURL(audioBlob);
-
         const a = document.createElement("a");
         a.href = url;
         a.download = "full_session_audio.webm";
@@ -200,8 +181,13 @@ const Room = () => {
       console.warn("❗ Streams not ready for recording.");
     }
   };
-//
 
+  const stopFullRecording = () => {
+    if (combinedRecorder) {
+      combinedRecorder.stop();
+      console.log("💾 FULL SESSION RECORDING STOPPED!");
+    }
+  };
 
   return (
     <div>
@@ -210,12 +196,12 @@ const Room = () => {
 
       {myStream && <button onClick={sendStreams}>Send Stream</button>}
       {remoteSocketId && <button onClick={handleCallUser}>CALL</button>}
-       {myStream && remoteStream && (
-  <>
-    <button onClick={startFullRecording}>🎙 Start Full Session Recording</button>
-    <button onClick={stopFullRecording}>💾 Stop & Download Full Audio</button>
-  </>
-)}
+      {myStream && remoteStream && (
+        <>
+          <button onClick={startFullRecording}>🎙 Start Full Session Recording</button>
+          <button onClick={stopFullRecording}>💾 Stop & Download Full Audio</button>
+        </>
+      )}
 
       {myStream && (
         <>
