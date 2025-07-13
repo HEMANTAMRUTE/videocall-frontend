@@ -6,6 +6,7 @@ import peer from "../service/Peer";
 const ASSEMBLY_API_KEY = "0ff558c76ad14ab087192c8d37f13fa5"; // replace this with your actual key
 
 const Room = () => {
+  
   const socket = useSocket();
   const [remoteSocketId, setRemoteSocketId] = useState(null);
   const [myStream, setMyStream] = useState();
@@ -161,15 +162,23 @@ const Room = () => {
     }
   };
 
-  const transcribeAudio = async (blob) => {
-    try {
-      const uploadUrl = await uploadToAssemblyAI(blob);
-      const transcriptId = await startTranscription(uploadUrl);
-      await pollTranscription(transcriptId);
-    } catch (err) {
-      console.error("Transcription failed:", err);
-    }
-  };
+ const transcribeAudio = async (audioBlob) => {
+  const formData = new FormData();
+  formData.append("file", audioBlob, "recording.webm");
+
+  try {
+    const response = await fetch("http://127.0.0.1:8000/transcribe", {
+      method: "POST",
+      body: formData,
+    });
+
+    const data = await response.json();
+    alert("📝 Transcription:\n" + data.text);
+    console.log("Transcription:", data.text);
+  } catch (err) {
+    console.error("Whisper transcription failed:", err);
+  }
+};
 
   const startFullRecording = () => {
     if (myStream && remoteStream) {
