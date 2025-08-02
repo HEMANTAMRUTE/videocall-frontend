@@ -1,21 +1,19 @@
-// Room.js (with AssemblyAI integration)
 import React, { useEffect, useCallback, useState, useRef } from "react";
 import { useSocket } from "../context/SocketProvider";
 import peer from "../service/Peer";
 
-const ASSEMBLY_API_KEY = "0ff558c76ad14ab087192c8d37f13fa5"; // replace this with your actual key
+const ASSEMBLY_API_KEY = "0ff558c76ad14ab087192c8d37f13fa5";
 
 const Room = () => {
-  
   const socket = useSocket();
   const [remoteSocketId, setRemoteSocketId] = useState(null);
   const [myStream, setMyStream] = useState();
   const [remoteStream, setRemoteStream] = useState();
-  const [combinedRecorder, setCombinedRecorder] = useState(null);
   const [combinedChunks, setCombinedChunks] = useState([]);
 
   const myVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
+  const recorderRef = useRef(null);
 
   const handleUserJoined = useCallback(({ email, id }) => {
     console.log(`Email ${email} joined room`);
@@ -86,14 +84,12 @@ const Room = () => {
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
       remoteVideoRef.current.srcObject = remoteStream;
-      console.log("✅ remoteVideoRef attached stream:", remoteVideoRef.current.srcObject);
     }
   }, [remoteStream]);
 
   useEffect(() => {
     if (myVideoRef.current && myStream) {
       myVideoRef.current.srcObject = myStream;
-      console.log("✅ myVideoRef attached stream:", myVideoRef.current.srcObject);
     }
   }, [myStream]);
 
@@ -112,81 +108,40 @@ const Room = () => {
     };
   }, [socket, handleUserJoined, handleIncommingCall, handleCallAccepted, handleNegoNeedIncomming, handleNegoNeedFinal]);
 
-  const logAudioTracks = () => {
-    const localTracks = myStream?.getAudioTracks() || [];
-    const remoteTracks = remoteStream?.getAudioTracks() || [];
-    console.log("🎧 Local Audio Tracks:", localTracks);
-    console.log("🎧 Remote Audio Tracks:", remoteTracks);
-    localTracks.forEach((track) => console.log("📌 Local track - enabled:", track.enabled, "| readyState:", track.readyState));
-    remoteTracks.forEach((track) => console.log("📌 Remote track - enabled:", track.enabled, "| readyState:", track.readyState));
-  };
+  const transcribeAudio = async (audioBlob) => {
+    const formData = new FormData();
+    formData.append("file", audioBlob, "recording.webm");
 
-  const uploadToAssemblyAI = async (blob) => {
-    const response = await fetch("https://api.assemblyai.com/v2/upload", {
-      method: "POST",
-      headers: { authorization: ASSEMBLY_API_KEY },
-      body: blob,
-    });
-    const data = await response.json();
-    return data.upload_url;
-  };
-
-  const startTranscription = async (uploadUrl) => {
-    const response = await fetch("https://api.assemblyai.com/v2/transcript", {
-      method: "POST",
-      headers: {
-        authorization: ASSEMBLY_API_KEY,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ audio_url: uploadUrl }),
-    });
-    const data = await response.json();
-    return data.id;
-  };
-
-  const pollTranscription = async (transcriptId) => {
-    const pollingEndpoint = `https://api.assemblyai.com/v2/transcript/${transcriptId}`;
-    while (true) {
-      const res = await fetch(pollingEndpoint, {
-        headers: { authorization: ASSEMBLY_API_KEY },
+    try {
+      const response = await fetch("http://127.0.0.1:8000/transcribe", {
+        method: "POST",
+        body: formData,
       });
-      const data = await res.json();
-      if (data.status === "completed") {
-        alert("📝 Transcription:\n" + data.text);
-        console.log("Transcription:", data.text);
-        return data.text;
-      } else if (data.status === "error") {
-        throw new Error(data.error);
-      }
-      await new Promise((r) => setTimeout(r, 3000));
+
+      const data = await response.json();
+      alert("📝 Transcription:\n" + data.text);
+      console.log("Transcription:", data.text);
+    } catch (err) {
+      console.error("Whisper transcription failed:", err);
     }
   };
 
- const transcribeAudio = async (audioBlob) => {
-  const formData = new FormData();
-  formData.append("file", audioBlob, "recording.webm");
-
-  try {
-    const response = await fetch("http://127.0.0.1:8000/transcribe", {
-      method: "POST",
-      body: formData,
-    });
-
-    const data = await response.json();
-    alert("📝 Transcription:\n" + data.text);
-    console.log("Transcription:", data.text);
-  } catch (err) {
-    console.error("Whisper transcription failed:", err);
-  }
-};
-
   const startFullRecording = () => {
     if (myStream && remoteStream) {
-      logAudioTracks();
-      const combinedStream = new MediaStream([
-        ...myStream.getAudioTracks(),
-        ...remoteStream.getAudioTracks(),
-      ]);
+      const audioContext = new AudioContext();
+      const destination = audioContext.createMediaStreamDestination();
+
+      const localSource = audioContext.createMediaStreamSource(
+        new MediaStream(myStream.getAudioTracks())
+      );
+      localSource.connect(destination);
+
+      const remoteSource = audioContext.createMediaStreamSource(
+        new MediaStream(remoteStream.getAudioTracks())
+      );
+      remoteSource.connect(destination);
+
+      const combinedStream = destination.stream;
 
       const recorder = new MediaRecorder(combinedStream, {
         mimeType: MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
@@ -195,7 +150,9 @@ const Room = () => {
       });
 
       recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) setCombinedChunks((prev) => [...prev, e.data]);
+        if (e.data.size > 0) {
+          setCombinedChunks((prev) => [...prev, e.data]);
+        }
       };
 
       recorder.onstop = async () => {
@@ -204,22 +161,23 @@ const Room = () => {
         const url = URL.createObjectURL(audioBlob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = "full_session_audio.webm";
+        a.download = "recorded_audio.webm";
         a.click();
+        URL.revokeObjectURL(url);
         setCombinedChunks([]);
         console.log("💾 Download complete.");
         await transcribeAudio(audioBlob);
       };
 
+      recorderRef.current = recorder;
       recorder.start();
-      setCombinedRecorder(recorder);
       console.log("🎙 FULL SESSION RECORDING STARTED!");
     }
   };
 
   const stopFullRecording = () => {
-    if (combinedRecorder) {
-      combinedRecorder.stop();
+    if (recorderRef.current) {
+      recorderRef.current.stop();
       console.log("💾 FULL SESSION RECORDING STOPPED!");
     }
   };

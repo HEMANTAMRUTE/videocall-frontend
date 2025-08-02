@@ -6,7 +6,6 @@ import React from 'react';
 
 import LobbyScreen from '../src/screen/Lobby';
 import Room from '../src/screen/Room';
-
 function App() {
   
   return (
